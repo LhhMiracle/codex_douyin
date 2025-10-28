@@ -12,6 +12,10 @@ from codex_douyin.douyin.product_parser import DouyinProductParser
         ("https://www.douyin.com/goods/9876543210987654321", "9876543210987654321"),
         ("https://haohuo.jinritemai.com/ecommerce/product/item/112233445566", "112233445566"),
         ("https://example.com?product_id=998877", "998877"),
+        (
+            "https://haohuo.snssdk.com/views/product/index.html?id=55667788",
+            "55667788",
+        ),
     ],
 )
 def test_extract_product_id(url: str, expected: str) -> None:
