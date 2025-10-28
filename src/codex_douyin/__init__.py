@@ -1,4 +1,4 @@
-from .douyin.product_parser import DouyinProductParser, ParsedProductInput
+from .douyin.product_parser import DouyinProductParser
 from .image_processing.pipeline import (
     BackgroundRemovalConfig,
     BackgroundRemover,
@@ -19,5 +19,4 @@ __all__ = [
     "ImageDownloader",
     "ProcessedImage",
     "ProductAsset",
-    "ParsedProductInput",
 ]
