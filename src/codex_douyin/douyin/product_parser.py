@@ -17,6 +17,7 @@ _PRODUCT_ID_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"goods/(\d+)", re.IGNORECASE),
     re.compile(r"item/(\d+)", re.IGNORECASE),
     re.compile(r"product_id=(\d+)", re.IGNORECASE),
+    re.compile(r"index\.html\?id=(\d+)", re.IGNORECASE),
 )
 
 
