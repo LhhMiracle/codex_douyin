@@ -18,17 +18,13 @@ Utilities for fetching Douyin product imagery, removing backgrounds, and exporti
    pip install .[test]
    ```
 
-2. Process a product input (short link, long link, or full share text):
+2. Process a product link:
 
    ```bash
-   python -m codex_douyin.cli.process_images "<短链或整段文案>" --output processed
+   python -m codex_douyin.cli.process_images "<douyin-share-url>" --output processed
    ```
 
    The command downloads all product images, removes their backgrounds, applies upscaling, and stores the transparent PNGs in the `processed/` directory.
-
-   - Supply cookies explicitly with `--cookies "<raw-cookie>"`, or define `DY_COOKIES` in your environment / `.env` file for automatic loading.
-   - Use `--dry-run` to only normalize the input and display the resolved URL and product ID without downloading assets.
-   - If a short link does not land on a product detail page, switch to a long link containing the `product_id`, or retry with valid cookies so the parser can inspect the HTML fallback.
 
 ## Testing
 
@@ -40,5 +36,5 @@ pytest
 
 ## Notes
 
-- Some Douyin endpoints require authentication or may enforce rate limits. Supply valid cookies with `--cookies` (or set `DY_COOKIES` via environment variables / `.env`) when HTML fallback parsing fails.
+- Some Douyin endpoints require authentication or may enforce rate limits. Provide valid cookies if necessary by adjusting the `DouyinProductParser` headers.
 - Background removal relies on OpenCV's GrabCut; extremely complex backgrounds may need manual refinement.
