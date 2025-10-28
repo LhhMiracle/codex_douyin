@@ -18,10 +18,10 @@ Utilities for fetching Douyin product imagery, removing backgrounds, and exporti
    pip install .[test]
    ```
 
-2. Process a product input (short link, long link, or full share text):
+2. Process a product link:
 
    ```bash
-   python -m codex_douyin.cli.process_images "<短链或整段文案>" --output processed
+   python -m codex_douyin.cli.process_images "<douyin-share-url>" --output processed
    ```
 
    The command downloads all product images, removes their backgrounds, applies upscaling, and stores the transparent PNGs in the `processed/` directory.
