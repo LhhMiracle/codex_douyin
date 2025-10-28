@@ -38,7 +38,8 @@ def test_extract_images_from_payload() -> None:
 
 
 def test_parse_input_with_share_text_and_short_link(monkeypatch: pytest.MonkeyPatch) -> None:
-    parser = DouyinProductParser()
+    parser = DouyinProductParser(cookies=None)
+    parser.cookies = None
     final_url = "https://haohuo.jinritemai.com/ecommerce/product/item/778899"
 
     def fake_resolve(client, url):
@@ -87,7 +88,8 @@ class _StubResponse:
 
 
 def test_parse_input_short_link_without_query_uses_html(monkeypatch: pytest.MonkeyPatch) -> None:
-    parser = DouyinProductParser()
+    parser = DouyinProductParser(cookies=None)
+    parser.cookies = None
     final_url = "https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html"
     html = '<script>window.__INIT__={"productId":"12340001"};</script>'
     client = _RecordingClient(final_url, html)
@@ -111,7 +113,8 @@ def test_parse_input_short_link_without_query_uses_html(monkeypatch: pytest.Monk
 
 
 def test_parse_input_html_fallback_includes_cookies(monkeypatch: pytest.MonkeyPatch) -> None:
-    parser = DouyinProductParser()
+    cookies = "sessionid=abc; token=def"
+    parser = DouyinProductParser(cookies=cookies)
     final_url = "https://haohuo.jinritemai.com/ecommerce/product/detail/"
     html = '<div data-product-id="99887766"></div>'
     client = _RecordingClient(final_url, html)
@@ -120,12 +123,9 @@ def test_parse_input_html_fallback_includes_cookies(monkeypatch: pytest.MonkeyPa
         return final_url
 
     monkeypatch.setattr(parser, "_resolve_share_link", fake_resolve)
-
-    cookies = "sessionid=abc; token=def"
     parsed = parser.parse_input_to_product(
         "爆款短链 https://v.douyin.com/xyz789/",
         client=client,
-        cookies=cookies,
     )
 
     assert parsed.product_id == "99887766"

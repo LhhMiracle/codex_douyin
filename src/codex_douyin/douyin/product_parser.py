@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import logging
 import re
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -41,15 +43,27 @@ class ParsedProductInput:
     product_id: str
 
 
-@dataclass(slots=True)
 class DouyinProductParser:
     """Fetches product metadata (especially image assets) from Douyin."""
 
-    timeout: float = 15.0
-    user_agent: str = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    )
+    __slots__ = ("timeout", "user_agent", "cookies")
+
+    def __init__(
+        self,
+        cookies: Optional[str] = None,
+        *,
+        timeout: float = 15.0,
+        user_agent: str = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ),
+    ) -> None:
+        self.timeout = timeout
+        self.user_agent = user_agent
+        if cookies is not None:
+            self.cookies = self._normalize_cookie(cookies)
+        else:
+            self.cookies = self._load_cookies_from_env()
 
     def fetch_product_assets(
         self, input_value: str, *, cookies: Optional[str] = None
@@ -69,11 +83,22 @@ class DouyinProductParser:
             )
         else:
             parsed = self.parse_input_to_product(normalized, cookies=cookies)
-        return self.fetch_product_assets_from_parsed(parsed)
+        effective_cookies = self._effective_cookies(cookies)
+        return self.fetch_product_assets_from_parsed(
+            parsed, cookies=effective_cookies
+        )
 
-    def fetch_product_assets_from_parsed(self, parsed_input: ParsedProductInput) -> List[ProductAsset]:
+    def fetch_product_assets_from_parsed(
+        self,
+        parsed_input: ParsedProductInput,
+        *,
+        cookies: Optional[str] = None,
+    ) -> List[ProductAsset]:
+        effective_cookies = self._effective_cookies(cookies)
         with httpx.Client(follow_redirects=True, timeout=self.timeout) as client:
-            payload = self._fetch_product_payload(client, parsed_input.product_id)
+            payload = self._fetch_product_payload(
+                client, parsed_input.product_id, cookies=effective_cookies
+            )
 
         images = list(self._extract_images(payload))
         if not images:
@@ -106,8 +131,11 @@ class DouyinProductParser:
             should_close = True
 
         try:
+            effective_cookies = self._effective_cookies(cookies)
             if self._is_short_link(normalized_url):
-                final_url = self._resolve_share_link(client, normalized_url)
+                final_url = self._resolve_share_link(
+                    client, normalized_url, cookies=effective_cookies
+                )
             else:
                 final_url = normalized_url
 
@@ -117,7 +145,7 @@ class DouyinProductParser:
                 logger.info("resolve: %s", final_url)
 
             product_id, source, effective_url = self._determine_product_id(
-                client, final_url or "", cookies=cookies
+                client, final_url or "", cookies=effective_cookies
             )
             final_url = effective_url or final_url
             logger.info("parse: product_id=%s (source=%s)", product_id, source)
@@ -131,9 +159,12 @@ class DouyinProductParser:
             if should_close:
                 client.close()
 
-    def _resolve_share_link(self, client: httpx.Client, url: str) -> str:
+    def _resolve_share_link(
+        self, client: httpx.Client, url: str, *, cookies: Optional[str] = None
+    ) -> str:
         logger.debug("Resolving Douyin share link: %s", url)
-        response = client.get(url, headers={"User-Agent": self.user_agent})
+        headers = self._build_headers(cookies=cookies)
+        response = client.get(url, headers=headers)
         response.raise_for_status()
         final_url = str(response.url)
         logger.debug("Final resolved URL: %s", final_url)
@@ -191,7 +222,9 @@ class DouyinProductParser:
         if product_id:
             return product_id, "url", final_url
 
-        html, resolved_url = self._fetch_final_url_html(client, final_url, cookies)
+        html, resolved_url = self._fetch_final_url_html(
+            client, final_url, cookies=cookies
+        )
         if resolved_url and resolved_url != final_url:
             logger.info("resolve: %s -> %s", final_url, resolved_url)
             final_url = resolved_url
@@ -214,11 +247,13 @@ class DouyinProductParser:
         )
 
     def _fetch_final_url_html(
-        self, client: httpx.Client, url: str, cookies: Optional[str]
+        self,
+        client: httpx.Client,
+        url: str,
+        *,
+        cookies: Optional[str] = None,
     ) -> tuple[str, str]:
-        headers = {"User-Agent": self.user_agent}
-        if cookies:
-            headers["Cookie"] = cookies
+        headers = self._build_headers(cookies=cookies)
         response = client.get(url, headers=headers)
         response.raise_for_status()
         return response.text, str(response.url)
@@ -228,13 +263,21 @@ class DouyinProductParser:
         snippet = re.sub(r"\s+", " ", snippet)
         return snippet.strip()
 
-    def _fetch_product_payload(self, client: httpx.Client, product_id: str) -> dict:
+    def _fetch_product_payload(
+        self,
+        client: httpx.Client,
+        product_id: str,
+        *,
+        cookies: Optional[str] = None,
+    ) -> dict:
         endpoints = (
             "https://www.douyin.com/aweme/v1/web/product/detail/",
             "https://ec.snssdk.com/product/goods/detail/v2",
         )
 
-        headers = {"User-Agent": self.user_agent, "Referer": "https://www.douyin.com/"}
+        headers = self._build_headers(
+            {"Referer": "https://www.douyin.com/"}, cookies=cookies
+        )
         params_variants = (
             {"product_id": product_id},
             {"product_id": product_id, "scene": "detail"},
@@ -307,3 +350,53 @@ class DouyinProductParser:
                     height=height if isinstance(height, int) else None,
                     format=fmt if isinstance(fmt, str) else None,
                 )
+
+    def _effective_cookies(self, override: Optional[str]) -> Optional[str]:
+        normalized = self._normalize_cookie(override)
+        if normalized is not None:
+            return normalized
+        return self.cookies
+
+    def _normalize_cookie(self, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    def _build_headers(
+        self,
+        extra: Optional[dict[str, str]] = None,
+        *,
+        cookies: Optional[str] = None,
+    ) -> dict[str, str]:
+        headers: dict[str, str] = {"User-Agent": self.user_agent}
+        if extra:
+            headers.update(extra)
+        cookie_value = self._effective_cookies(cookies)
+        if cookie_value:
+            headers["Cookie"] = cookie_value
+        return headers
+
+    def _load_cookies_from_env(self) -> Optional[str]:
+        env_value = os.getenv("DY_COOKIES")
+        normalized = self._normalize_cookie(env_value)
+        if normalized:
+            return normalized
+
+        env_path = Path(".env")
+        if not env_path.exists():
+            return None
+
+        try:
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if "=" not in stripped:
+                    continue
+                key, raw_value = stripped.split("=", 1)
+                if key.strip() == "DY_COOKIES":
+                    return self._normalize_cookie(raw_value.strip().strip('"').strip("'"))
+        except OSError:
+            logger.debug("Unable to read .env file for DY_COOKIES", exc_info=True)
+        return None

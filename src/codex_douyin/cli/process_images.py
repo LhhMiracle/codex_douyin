@@ -89,10 +89,10 @@ def _load_cookies(explicit: str | None) -> Optional[str]:
 def main() -> None:
     args = parse_args()
     cookies = _load_cookies(args.cookies)
-    product_parser = DouyinProductParser()
+    product_parser = DouyinProductParser(cookies=cookies)
 
     try:
-        parsed_input = product_parser.parse_input_to_product(args.url, cookies=cookies)
+        parsed_input = product_parser.parse_input_to_product(args.url)
     except ValueError as exc:
         logger.error("Input parsing failed: %s", exc)
         raise SystemExit(1) from exc
@@ -109,7 +109,7 @@ def main() -> None:
     logger.info("Fetching product assets from %s", fetch_target)
 
     try:
-        assets = product_parser.fetch_product_assets(fetch_target, cookies=cookies)
+        assets = product_parser.fetch_product_assets(fetch_target)
     except Exception as exc:  # pragma: no cover - network/HTTP errors
         logger.error("Failed to fetch product assets: %s", exc)
         raise SystemExit(2) from exc
